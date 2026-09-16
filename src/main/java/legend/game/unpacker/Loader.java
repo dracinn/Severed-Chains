@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.ints.Int2IntArrayMap;
 import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import legend.core.Async;
 import legend.core.DebugHelper;
+import legend.game.modding.ModAssetResolver;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -18,7 +19,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
-import java.util.stream.StreamSupport;
 
 public final class Loader {
   private Loader() { }
@@ -30,25 +30,30 @@ public final class Loader {
   private static final AtomicInteger LOADING_COUNT = new AtomicInteger();
 
   public static Path resolve(final String name) {
-    return Unpacker.ROOT.resolve(fixPath(name));
+    return resolve(Path.of(fixPath(name)));
   }
 
   public static Path resolve(final Path name) {
-    return Unpacker.ROOT.resolve(name);
+    if(name.isAbsolute()) {
+      return name;
+    }
+
+    return ModAssetResolver.resolve(name);
   }
 
   public static FileData loadFileSync(final Path path) {
-    LOGGER.info("Loading file %s", path);
+    final Path resolved = ModAssetResolver.resolveGamePath(path);
+    LOGGER.info("Loading file %s", resolved);
 
     try {
-      return new FileData(Files.readAllBytes(path));
+      return new FileData(Files.readAllBytes(resolved));
     } catch(final IOException e) {
-      throw new RuntimeException("Failed to load file " + path, e);
+      throw new RuntimeException("Failed to load file " + resolved, e);
     }
   }
 
   public static FileData loadFileSync(final String name) {
-    return loadFileSync(Unpacker.ROOT.resolve(fixPath(name)));
+    return loadFileSync(resolve(name));
   }
 
   public static CompletableFuture<FileData> loadFile(final Path path) {
@@ -163,112 +168,131 @@ public final class Loader {
   public static List<FileData> loadDirectorySync(final Path dir) {
     LOGGER.info("Loading directory %s", dir);
 
-    final Path mrg = dir.resolve("mrg");
+    final Path relative = ModAssetResolver.relativeToGameRoot(dir);
+    if(relative != null) {
+      return loadMergedGameDirectory(relative);
+    }
 
-    if(Files.exists(mrg)) {
-      try(final BufferedReader reader = Files.newBufferedReader(mrg)) {
-        final Int2IntMap fileMap = new Int2IntArrayMap();
-        final Int2IntMap virtualSizeMap = new Int2IntArrayMap();
+    return loadDirectDirectory(dir);
+  }
 
-        reader.lines().forEach(line -> {
-          final String[] parts = MRG_ENTRY.split(line);
+  private static List<FileData> loadMergedGameDirectory(final Path relativeDir) {
+    final Path mrg = ModAssetResolver.resolve(relativeDir.resolve("mrg"));
 
-          if(parts.length != 3) {
-            throw new RuntimeException("Invalid MRG entry! " + line);
-          }
+    if(Files.isRegularFile(mrg)) {
+      return loadMrgDirectory(relativeDir, mrg);
+    }
 
-          final int virtual = Integer.parseInt(parts[0]);
+    final List<Path> children = new ArrayList<>(ModAssetResolver.listMergedFiles(relativeDir));
+    children.sort(Loader::compareFilenames);
 
-          // Indicates no file
-          if(parts[1].isBlank()) {
-            fileMap.put(virtual, -1);
-            virtualSizeMap.put(virtual, 0);
-            return;
-          }
-
-          final int real = Integer.parseInt(parts[1]);
-          fileMap.put(virtual, real);
-          virtualSizeMap.put(virtual, Integer.parseInt(parts[2]));
-        });
-
-        final List<FileData> files = new ArrayList<>();
-
-        // Add real files
-        for(final var entry : fileMap.int2IntEntrySet()) {
-          final int virtual = entry.getIntKey();
-          final int real = entry.getIntValue();
-
-          // No file
-          if(real == -1) {
-            files.add(null);
-            continue;
-          }
-
-          try {
-            final Path file = dir.resolve(String.valueOf(real));
-            if(Files.isRegularFile(file)) {
-              if(virtual == real) {
-                files.add(new FileData(Files.readAllBytes(file)));
-              } else {
-                files.add(null);
-              }
-            } else if(Files.isDirectory(file)) {
-              files.add(new FileData(new byte[0]));
-            }
-          } catch(final IOException e) {
-            throw new RuntimeException("Failed to load directory " + dir, e);
-          }
-        }
-
-        // Add virtual files
-        for(final var entry : fileMap.int2IntEntrySet()) {
-          final int virtual = entry.getIntKey();
-          int real = entry.getIntValue();
-
-          if(virtual == real || real == -1) {
-            continue;
-          }
-
-          // Resolve to the realest file
-          while(fileMap.get(real) != real) {
-            real = fileMap.get(real);
-          }
-
-          final Path file = dir.resolve(String.valueOf(real));
-          if(Files.isRegularFile(file)) {
-            files.set(virtual, FileData.virtual(files.get(real), virtualSizeMap.get(virtual), real));
-          }
-        }
-
-        return files;
+    final List<FileData> files = new ArrayList<>();
+    for(final Path child : children) {
+      try {
+        files.add(new FileData(Files.readAllBytes(child)));
       } catch(final IOException e) {
-        throw new RuntimeException("Failed to load directory " + dir, e);
+        throw new RuntimeException("Failed to load directory " + relativeDir, e);
       }
     }
 
-    try(final DirectoryStream<Path> ds = Files.newDirectoryStream(dir)) {
+    return files;
+  }
+
+  private static List<FileData> loadMrgDirectory(final Path relativeDir, final Path mrg) {
+    try(final BufferedReader reader = Files.newBufferedReader(mrg)) {
+      final Int2IntMap fileMap = new Int2IntArrayMap();
+      final Int2IntMap virtualSizeMap = new Int2IntArrayMap();
+
+      reader.lines().forEach(line -> {
+        final String[] parts = MRG_ENTRY.split(line);
+
+        if(parts.length != 3) {
+          throw new RuntimeException("Invalid MRG entry! " + line);
+        }
+
+        final int virtual = Integer.parseInt(parts[0]);
+
+        if(parts[1].isBlank()) {
+          fileMap.put(virtual, -1);
+          virtualSizeMap.put(virtual, 0);
+          return;
+        }
+
+        final int real = Integer.parseInt(parts[1]);
+        fileMap.put(virtual, real);
+        virtualSizeMap.put(virtual, Integer.parseInt(parts[2]));
+      });
+
       final List<FileData> files = new ArrayList<>();
 
-      StreamSupport.stream(ds.spliterator(), false)
-        .filter(Files::isRegularFile)
-        .sorted((path1, path2) -> {
-          final String filename1 = path1.getFileName().toString();
-          final String filename2 = path2.getFileName().toString();
+      for(final var entry : fileMap.int2IntEntrySet()) {
+        final int virtual = entry.getIntKey();
+        final int real = entry.getIntValue();
 
-          try {
-            return Integer.compare(Integer.parseInt(filename1), Integer.parseInt(filename2));
-          } catch(final NumberFormatException ignored) {
-          }
+        if(real == -1) {
+          files.add(null);
+          continue;
+        }
 
-          return String.CASE_INSENSITIVE_ORDER.compare(filename1, filename2);
-        })
-        .forEach(child -> {
-          try {
-            files.add(new FileData(Files.readAllBytes(child)));
-          } catch(final IOException e) {
-            throw new RuntimeException("Failed to load directory " + dir, e);
+        try {
+          final Path file = ModAssetResolver.resolve(relativeDir.resolve(String.valueOf(real)));
+          if(Files.isRegularFile(file)) {
+            if(virtual == real) {
+              files.add(new FileData(Files.readAllBytes(file)));
+            } else {
+              files.add(null);
+            }
+          } else if(ModAssetResolver.isDirectory(relativeDir.resolve(String.valueOf(real)))) {
+            files.add(new FileData(new byte[0]));
           }
-        });
+        } catch(final IOException e) {
+          throw new RuntimeException("Failed to load directory " + relativeDir, e);
+        }
+      }
+
+      for(final var entry : fileMap.int2IntEntrySet()) {
+        final int virtual = entry.getIntKey();
+        int real = entry.getIntValue();
+
+        if(virtual == real || real == -1) {
+          continue;
+        }
+
+        while(fileMap.get(real) != real) {
+          real = fileMap.get(real);
+        }
+
+        final Path file = ModAssetResolver.resolve(relativeDir.resolve(String.valueOf(real)));
+        if(Files.isRegularFile(file)) {
+          files.set(virtual, FileData.virtual(files.get(real), virtualSizeMap.get(virtual), real));
+        }
+      }
+
+      return files;
+    } catch(final IOException e) {
+      throw new RuntimeException("Failed to load directory " + relativeDir, e);
+    }
+  }
+
+  private static List<FileData> loadDirectDirectory(final Path dir) {
+    try(final DirectoryStream<Path> ds = Files.newDirectoryStream(dir)) {
+      final List<Path> children = new ArrayList<>();
+      for(final Path child : ds) {
+        if(Files.isRegularFile(child)) {
+          children.add(child);
+        }
+      }
+
+      children.sort(Loader::compareFilenames);
+
+      final List<FileData> files = new ArrayList<>();
+      for(final Path child : children) {
+        try {
+          files.add(new FileData(Files.readAllBytes(child)));
+        } catch(final IOException e) {
+          throw new RuntimeException("Failed to load directory " + dir, e);
+        }
+      }
 
       return files;
     } catch(final IOException e) {
@@ -276,16 +300,28 @@ public final class Loader {
     }
   }
 
+  private static int compareFilenames(final Path path1, final Path path2) {
+    final String filename1 = path1.getFileName().toString();
+    final String filename2 = path2.getFileName().toString();
+
+    try {
+      return Integer.compare(Integer.parseInt(filename1), Integer.parseInt(filename2));
+    } catch(final NumberFormatException ignored) {
+    }
+
+    return String.CASE_INSENSITIVE_ORDER.compare(filename1, filename2);
+  }
+
   public static int getLoadingFileCount() {
     return LOADING_COUNT.get();
   }
 
   public static boolean exists(final String name) {
-    return Files.exists(Unpacker.ROOT.resolve(fixPath(name)));
+    return ModAssetResolver.exists(Path.of(fixPath(name)));
   }
 
   public static boolean isDirectory(final String name) {
-    return Files.isDirectory(Unpacker.ROOT.resolve(fixPath(name)));
+    return ModAssetResolver.isDirectory(Path.of(fixPath(name)));
   }
 
   private static String fixPath(String name) {
