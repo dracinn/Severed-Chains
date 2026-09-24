@@ -2,7 +2,7 @@ package org.legendofdragoon.severedchains.android.runtime;
 
 import android.content.Context;
 
-/** First runtime implementation; the ARM64 JRE 25 bridge is added in the next milestone. */
+/** Compatibility host that validates the installed ARM64 JRE 25 before a game backend is added. */
 public final class CompatibilityRuntimeHost implements RuntimeHost {
   @Override
   public String describe(final GamePaths paths) {

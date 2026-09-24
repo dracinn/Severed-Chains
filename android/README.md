@@ -24,8 +24,16 @@ not attempt to compile the upstream Java 25 game sources into DEX.
 ../gradlew -p android :app:assembleDebug
 ```
 
-The bootstrap app is intentionally a launcher shell. It verifies Android storage and
-exposes the two future launch paths; it does not yet bundle or execute the game engine.
+## Current status
+
+The debug app imports the player's four disc images into app-owned storage, installs a
+checksummed ARM64 JRE 25, and can create and destroy that JVM through a small native
+bridge. This provides an on-device verification point for the compatibility runtime.
+
+It intentionally does **not** yet bundle or execute the game engine. Upstream currently
+uses desktop LWJGL/SDL and Linux/desktop native libraries; those need an Android
+renderer, audio, input, and lifecycle backend before `legend.game.Main` can run on a
+phone. The intended Java entry point is `legend.game.Main`.
 
 ## Legal notice
 
