@@ -12,7 +12,7 @@ public final class CompatibilityRuntimeHost implements RuntimeHost {
     if (!Jre25Installer.isInstalled(paths)) {
       return "Disc images are ready. Install the ARM64 JRE 25 runtime to launch.";
     }
-    return "Disc images and ARM64 JRE 25 are ready. Native launcher bridge is next.";
+    return "Disc images and ARM64 JRE 25 are ready. Native bridge: " + NativeRuntimeBridge.inspect(paths);
   }
 
   @Override
@@ -23,6 +23,6 @@ public final class CompatibilityRuntimeHost implements RuntimeHost {
     if (!Jre25Installer.isInstalled(paths)) {
       return new Result(false, "Install the ARM64 JRE 25 runtime before launch.");
     }
-    return new Result(false, "The game files and JRE 25 are ready, but the native launcher bridge has not been installed yet.");
+    return new Result(false, "Native bridge check: " + NativeRuntimeBridge.inspect(paths) + " Game payload launch is next.");
   }
 }
