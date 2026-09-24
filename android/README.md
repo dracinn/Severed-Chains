@@ -35,6 +35,11 @@ uses desktop LWJGL/SDL and Linux/desktop native libraries; those need an Android
 renderer, audio, input, and lifecycle backend before `legend.game.Main` can run on a
 phone. The intended Java entry point is `legend.game.Main`.
 
+The shared engine now selects its platform backend with the
+`legend.platform.class` system property (desktop defaults to SDL). The future Android
+runtime JAR will provide its own `PlatformManager` implementation through that contract;
+this prevents Android code from being coupled to the desktop SDL implementation.
+
 ## Legal notice
 
 Severed Chains requires the player to provide their own legally obtained Legend of
