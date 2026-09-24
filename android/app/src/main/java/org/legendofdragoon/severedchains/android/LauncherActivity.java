@@ -1,18 +1,36 @@
 package org.legendofdragoon.severedchains.android;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import org.legendofdragoon.severedchains.android.runtime.CompatibilityRuntimeHost;
+import org.legendofdragoon.severedchains.android.runtime.GameDataImporter;
+import org.legendofdragoon.severedchains.android.runtime.GamePaths;
+import org.legendofdragoon.severedchains.android.runtime.RuntimeHost;
+
+import java.io.IOException;
 
 /**
  * Android-owned entry point. RuntimeHost will initially launch a bundled ARM64 JVM
  * compatibility host, and can later be replaced by a native engine host.
  */
 public final class LauncherActivity extends Activity {
+  private static final int PICK_DISC_IMAGE = 1001;
+
+  private GamePaths gamePaths;
+  private RuntimeHost runtimeHost;
+  private TextView status;
+
   @Override
   protected void onCreate(final Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    gamePaths = GamePaths.create(this);
+    runtimeHost = new CompatibilityRuntimeHost();
 
     final LinearLayout content = new LinearLayout(this);
     content.setOrientation(LinearLayout.VERTICAL);
@@ -20,17 +38,64 @@ public final class LauncherActivity extends Activity {
     content.setPadding(padding, padding, padding, padding);
 
     final TextView title = new TextView(this);
-    title.setText("Severed Chains Android\n\nLauncher bootstrap complete.");
+    title.setText("Severed Chains Android");
     title.setTextSize(22);
     content.addView(title);
 
-    final TextView status = new TextView(this);
-    status.setText(
-        "Next: add the ARM64 compatibility runtime, disc-image import, controls, and logs.\n\n"
-            + "The game and disc images are not bundled with this app.");
+    status = new TextView(this);
     status.setTextSize(16);
     content.addView(status);
 
+    final Button importDisc = new Button(this);
+    importDisc.setText("Import disc image");
+    importDisc.setOnClickListener(ignored -> selectDiscImage());
+    content.addView(importDisc);
+
+    final Button launch = new Button(this);
+    launch.setText("Launch Severed Chains");
+    launch.setOnClickListener(ignored -> launchGame());
+    content.addView(launch);
+
+    final TextView legal = new TextView(this);
+    legal.setText("The game and disc images are not bundled. Import your own legally obtained disc images.");
+    legal.setTextSize(14);
+    content.addView(legal);
+
+    refreshStatus();
     setContentView(content);
+  }
+
+  private void selectDiscImage() {
+    final Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+    intent.addCategory(Intent.CATEGORY_OPENABLE);
+    intent.setType("application/octet-stream");
+    startActivityForResult(intent, PICK_DISC_IMAGE);
+  }
+
+  @Override
+  @SuppressWarnings("deprecation")
+  protected void onActivityResult(final int requestCode, final int resultCode, final Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode != PICK_DISC_IMAGE || resultCode != RESULT_OK || data == null) {
+      return;
+    }
+    final Uri discImage = data.getData();
+    if (discImage == null) {
+      return;
+    }
+    try {
+      GameDataImporter.importDiscImage(this, discImage, gamePaths);
+      refreshStatus();
+    } catch (final IOException e) {
+      status.setText("Import failed: " + e.getMessage());
+    }
+  }
+
+  private void launchGame() {
+    status.setText(runtimeHost.start(this, gamePaths).message());
+  }
+
+  private void refreshStatus() {
+    status.setText("Game files: " + gamePaths.importedDiscCount() + "/4 discs\n" + runtimeHost.describe(gamePaths));
   }
 }
