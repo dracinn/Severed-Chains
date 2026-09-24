@@ -9,7 +9,10 @@ public final class CompatibilityRuntimeHost implements RuntimeHost {
     if (paths.importedDiscCount() < 4) {
       return "Import all four disc images before launching.";
     }
-    return "Disc images are ready. Install the ARM64 JRE 25 runtime to launch.";
+    if (!Jre25Installer.isInstalled(paths)) {
+      return "Disc images are ready. Install the ARM64 JRE 25 runtime to launch.";
+    }
+    return "Disc images and ARM64 JRE 25 are ready. Native launcher bridge is next.";
   }
 
   @Override
@@ -17,6 +20,9 @@ public final class CompatibilityRuntimeHost implements RuntimeHost {
     if (paths.importedDiscCount() < 4) {
       return new Result(false, "Four disc images are required before launch.");
     }
-    return new Result(false, "The game files are ready, but the ARM64 JRE 25 runtime has not been installed yet.");
+    if (!Jre25Installer.isInstalled(paths)) {
+      return new Result(false, "Install the ARM64 JRE 25 runtime before launch.");
+    }
+    return new Result(false, "The game files and JRE 25 are ready, but the native launcher bridge has not been installed yet.");
   }
 }

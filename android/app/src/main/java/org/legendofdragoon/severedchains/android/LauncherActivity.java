@@ -11,6 +11,7 @@ import android.widget.TextView;
 import org.legendofdragoon.severedchains.android.runtime.CompatibilityRuntimeHost;
 import org.legendofdragoon.severedchains.android.runtime.GameDataImporter;
 import org.legendofdragoon.severedchains.android.runtime.GamePaths;
+import org.legendofdragoon.severedchains.android.runtime.Jre25Installer;
 import org.legendofdragoon.severedchains.android.runtime.RuntimeHost;
 
 import java.io.IOException;
@@ -56,6 +57,11 @@ public final class LauncherActivity extends Activity {
     launch.setOnClickListener(ignored -> launchGame());
     content.addView(launch);
 
+    final Button installRuntime = new Button(this);
+    installRuntime.setText("Install ARM64 JRE 25");
+    installRuntime.setOnClickListener(ignored -> installRuntime());
+    content.addView(installRuntime);
+
     final TextView legal = new TextView(this);
     legal.setText("The game and disc images are not bundled. Import your own legally obtained disc images.");
     legal.setTextSize(14);
@@ -93,6 +99,18 @@ public final class LauncherActivity extends Activity {
 
   private void launchGame() {
     status.setText(runtimeHost.start(this, gamePaths).message());
+  }
+
+  private void installRuntime() {
+    status.setText("Downloading and installing ARM64 JRE 25…");
+    new Thread(() -> {
+      try {
+        Jre25Installer.install(gamePaths, message -> runOnUiThread(() -> status.setText(message)));
+        runOnUiThread(this::refreshStatus);
+      } catch (final IOException e) {
+        runOnUiThread(() -> status.setText("Runtime installation failed: " + e.getMessage()));
+      }
+    }, "jre25-installer").start();
   }
 
   private void refreshStatus() {
