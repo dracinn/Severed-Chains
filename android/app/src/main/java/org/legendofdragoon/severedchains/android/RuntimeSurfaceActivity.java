@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.MotionEvent;
 import android.widget.TextView;
 
 import org.legendofdragoon.severedchains.android.runtime.NativeEglSurface;
@@ -17,6 +18,10 @@ public final class RuntimeSurfaceActivity extends Activity implements SurfaceHol
     super.onCreate(savedInstanceState);
     final SurfaceView surface = new SurfaceView(this);
     surface.getHolder().addCallback(this);
+    surface.setOnTouchListener((view, event) -> {
+      NativeEglSurface.touch(event.getActionMasked(), event.getX(), event.getY(), view.getWidth(), view.getHeight());
+      return true;
+    });
     status = new TextView(this);
     status.setText("Preparing Android OpenGL ES surface…");
     setContentView(surface);

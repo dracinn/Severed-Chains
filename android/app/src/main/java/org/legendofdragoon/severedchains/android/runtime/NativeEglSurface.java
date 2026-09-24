@@ -13,5 +13,6 @@ public final class NativeEglSurface {
   /** @return an error message, or {@code null} when the surface was initialized. */
   public static native String start(Surface surface);
   public static native void resize(int width, int height);
+  public static native void touch(int action, float x, float y, int width, int height);
   public static native void stop();
 }

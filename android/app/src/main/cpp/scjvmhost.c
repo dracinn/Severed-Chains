@@ -178,6 +178,19 @@ Java_org_legendofdragoon_severedchains_android_runtime_NativeEglSurface_resize(
 }
 
 JNIEXPORT void JNICALL
+Java_org_legendofdragoon_severedchains_android_runtime_NativeEglSurface_touch(
+    JNIEnv *env, jclass clazz, jint action, jfloat x, jfloat y, jint width, jint height) {
+  (void) env; (void) clazz; (void) action;
+  if (egl_display == EGL_NO_DISPLAY || egl_surface == EGL_NO_SURFACE || width <= 0 || height <= 0) return;
+  const float normalized_x = x / (float) width;
+  const float normalized_y = y / (float) height;
+  glClearColor(0.04f + 0.20f * normalized_x, 0.08f + 0.25f * normalized_y,
+      0.16f + 0.20f * (1.0f - normalized_x), 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  eglSwapBuffers(egl_display, egl_surface);
+}
+
+JNIEXPORT void JNICALL
 Java_org_legendofdragoon_severedchains_android_runtime_NativeEglSurface_stop(
     JNIEnv *env, jclass clazz) {
   (void) env; (void) clazz;
