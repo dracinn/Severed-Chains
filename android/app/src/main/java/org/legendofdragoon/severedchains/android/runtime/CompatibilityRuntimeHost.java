@@ -23,6 +23,7 @@ public final class CompatibilityRuntimeHost implements RuntimeHost {
     if (!Jre25Installer.isInstalled(paths)) {
       return new Result(false, "Install the ARM64 JRE 25 runtime before launch.");
     }
-    return new Result(false, "Native bridge check: " + NativeRuntimeBridge.inspect(paths) + " Game payload launch is next.");
+    return new Result(false, "JRE 25 VM probe: " + NativeRuntimeBridge.probe(paths)
+        + " The Android renderer/audio port is required before game launch.");
   }
 }

@@ -18,5 +18,15 @@ public final class NativeRuntimeBridge {
     return inspectJvm(jvm.getAbsolutePath());
   }
 
+  public static String probe(final GamePaths paths) {
+    final File jre = new File(paths.runtime(), "jre25");
+    final File jvm = new File(jre, "lib/server/libjvm.so");
+    if (!jvm.isFile()) {
+      return "libjvm.so is missing";
+    }
+    return probeJvm(jvm.getAbsolutePath(), jre.getAbsolutePath());
+  }
+
   private static native String inspectJvm(String absoluteJvmPath);
+  private static native String probeJvm(String absoluteJvmPath, String javaHome);
 }
