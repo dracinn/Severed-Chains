@@ -42,7 +42,7 @@ public final class LauncherActivity extends Activity {
     content.setPadding(padding, padding, padding, padding);
 
     final TextView title = new TextView(this);
-    title.setText("Severed Chains Android 0.1.2-debug");
+    title.setText("Severed Chains Android 0.1.3-debug");
     title.setTextSize(22);
     content.addView(title);
 

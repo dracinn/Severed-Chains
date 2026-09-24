@@ -12,11 +12,13 @@ public final class GamePaths {
   private final File runtime;
   private final File logs;
 
-  private GamePaths(final File root) {
+  private GamePaths(final File root, final File runtimeRoot) {
     this.root = root;
     discs = new File(root, "discs");
-    runtime = new File(root, "runtime");
-    logs = new File(root, "logs");
+    // Android blocks dlopen() from shared/external storage. Keep executable JRE files in
+    // the app-private directory, while disc images remain in external app storage.
+    runtime = new File(runtimeRoot, "runtime");
+    logs = new File(runtimeRoot, "logs");
   }
 
   public static GamePaths create(final Context context) {
@@ -24,7 +26,9 @@ public final class GamePaths {
     if (filesDir == null) {
       throw new IllegalStateException("External app storage is unavailable");
     }
-    final GamePaths paths = new GamePaths(new File(filesDir, "SeveredChains"));
+    final GamePaths paths = new GamePaths(
+        new File(filesDir, "SeveredChains"),
+        new File(context.getFilesDir(), "SeveredChains"));
     paths.ensureDirectories();
     return paths;
   }
