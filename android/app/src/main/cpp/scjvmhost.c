@@ -1,9 +1,31 @@
 #include <jni.h>
+#include <android/native_window_jni.h>
 #include <dlfcn.h>
+#include <EGL/egl.h>
+#include <GLES3/gl3.h>
 #include <stdio.h>
 #include <string.h>
 
 typedef jint (*jni_create_java_vm_fn)(JavaVM **vm, void **environment, void *arguments);
+
+static EGLDisplay egl_display = EGL_NO_DISPLAY;
+static EGLSurface egl_surface = EGL_NO_SURFACE;
+static EGLContext egl_context = EGL_NO_CONTEXT;
+static ANativeWindow *egl_window = NULL;
+
+static void stop_egl_surface(void) {
+  if (egl_display != EGL_NO_DISPLAY) {
+    eglMakeCurrent(egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    if (egl_context != EGL_NO_CONTEXT) eglDestroyContext(egl_display, egl_context);
+    if (egl_surface != EGL_NO_SURFACE) eglDestroySurface(egl_display, egl_surface);
+    eglTerminate(egl_display);
+  }
+  if (egl_window != NULL) ANativeWindow_release(egl_window);
+  egl_display = EGL_NO_DISPLAY;
+  egl_surface = EGL_NO_SURFACE;
+  egl_context = EGL_NO_CONTEXT;
+  egl_window = NULL;
+}
 
 static jstring make_string(JNIEnv *env, const char *message) {
   return (*env)->NewStringUTF(env, message);
@@ -114,4 +136,50 @@ Java_org_legendofdragoon_severedchains_android_runtime_NativeRuntimeBridge_probe
   (*env)->ReleaseStringUTFChars(env, absolute_jvm_path, jvm_path);
   (*env)->ReleaseStringUTFChars(env, java_home, home);
   return make_string(env, message);
+}
+
+JNIEXPORT jstring JNICALL
+Java_org_legendofdragoon_severedchains_android_runtime_NativeEglSurface_start(
+    JNIEnv *env, jclass clazz, jobject surface) {
+  (void) clazz;
+  stop_egl_surface();
+  egl_window = ANativeWindow_fromSurface(env, surface);
+  if (egl_window == NULL) return make_string(env, "Android surface is unavailable");
+  egl_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+  if (egl_display == EGL_NO_DISPLAY || !eglInitialize(egl_display, NULL, NULL)) goto failure;
+  const EGLint config_attributes[] = {EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT, EGL_SURFACE_TYPE,
+      EGL_WINDOW_BIT, EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_NONE};
+  EGLConfig config;
+  EGLint config_count;
+  if (!eglChooseConfig(egl_display, config_attributes, &config, 1, &config_count) || config_count == 0) goto failure;
+  const EGLint context_attributes[] = {EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE};
+  egl_surface = eglCreateWindowSurface(egl_display, config, egl_window, NULL);
+  egl_context = eglCreateContext(egl_display, config, EGL_NO_CONTEXT, context_attributes);
+  if (egl_surface == EGL_NO_SURFACE || egl_context == EGL_NO_CONTEXT ||
+      !eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context)) goto failure;
+  glClearColor(0.04f, 0.08f, 0.16f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  eglSwapBuffers(egl_display, egl_surface);
+  return NULL;
+failure:
+  stop_egl_surface();
+  return make_string(env, "could not create an OpenGL ES 3 window surface");
+}
+
+JNIEXPORT void JNICALL
+Java_org_legendofdragoon_severedchains_android_runtime_NativeEglSurface_resize(
+    JNIEnv *env, jclass clazz, jint width, jint height) {
+  (void) env; (void) clazz;
+  if (egl_display == EGL_NO_DISPLAY || egl_surface == EGL_NO_SURFACE) return;
+  glViewport(0, 0, width, height);
+  glClearColor(0.04f, 0.08f, 0.16f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  eglSwapBuffers(egl_display, egl_surface);
+}
+
+JNIEXPORT void JNICALL
+Java_org_legendofdragoon_severedchains_android_runtime_NativeEglSurface_stop(
+    JNIEnv *env, jclass clazz) {
+  (void) env; (void) clazz;
+  stop_egl_surface();
 }

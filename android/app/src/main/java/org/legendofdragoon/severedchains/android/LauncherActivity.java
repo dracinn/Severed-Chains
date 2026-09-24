@@ -57,6 +57,11 @@ public final class LauncherActivity extends Activity {
     launch.setOnClickListener(ignored -> launchGame());
     content.addView(launch);
 
+    final Button rendererTest = new Button(this);
+    rendererTest.setText("Test Android renderer surface");
+    rendererTest.setOnClickListener(ignored -> startActivity(new Intent(this, RuntimeSurfaceActivity.class)));
+    content.addView(rendererTest);
+
     final Button installRuntime = new Button(this);
     installRuntime.setText("Install ARM64 JRE 25");
     installRuntime.setOnClickListener(ignored -> installRuntime());

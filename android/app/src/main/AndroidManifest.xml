@@ -8,6 +8,10 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
         <activity
+            android:name=".RuntimeSurfaceActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize"
+            android:screenOrientation="landscape" />
+        <activity
             android:name=".LauncherActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:exported="true">
