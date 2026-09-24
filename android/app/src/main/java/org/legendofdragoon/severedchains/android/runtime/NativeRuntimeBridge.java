@@ -5,6 +5,9 @@ import java.io.File;
 /** JNI boundary for the installed ARM64 JRE. It deliberately verifies loading before VM creation. */
 public final class NativeRuntimeBridge {
   static {
+    // The downloaded ARM64 JRE's libjvm.so depends on the NDK shared C++ runtime.
+    // Load the APK-packaged copy into the app namespace before loading libjvm.so.
+    System.loadLibrary("c++_shared");
     System.loadLibrary("scjvmhost");
   }
 
