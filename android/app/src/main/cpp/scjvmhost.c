@@ -101,9 +101,9 @@ Java_org_legendofdragoon_severedchains_android_runtime_NativeRuntimeBridge_probe
       {.optionString = "-Duser.dir=/"},
   };
   JavaVMInitArgs arguments = {
-      // JNI 1.6 is the newest ABI constant exposed by Android's NDK headers.
-      // A JRE 25 JVM supports this stable JNI ABI.
-      .version = JNI_VERSION_1_6,
+      // Android's NDK headers omit this desktop-JNI constant, but the embedded JRE 25
+      // expects the modern Java 8 JNI ABI request when creating its VM.
+      .version = 0x00010008, /* JNI_VERSION_1_8 */
       .nOptions = (jint) (sizeof(options) / sizeof(options[0])),
       .options = options,
       .ignoreUnrecognized = JNI_TRUE,
