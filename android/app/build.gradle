@@ -5,6 +5,7 @@ plugins {
 android {
   namespace 'org.legendofdragoon.severedchains.android'
   compileSdk 35
+  buildToolsVersion '35.0.0'
 
   defaultConfig {
     applicationId 'org.legendofdragoon.severedchains.android'

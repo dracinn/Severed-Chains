@@ -8,7 +8,7 @@ merge.
 
 The first playable builds will use a compatibility host: Android owns storage, import,
 controls, log collection, and lifecycle; the host launches the Java game through an
-embedded ARM64 runtime. This matches the observable behaviour of the reference APK
+embedded **ARM64 JRE 25**. This matches the observable behaviour of the reference APK
 without reusing its code.
 
 The runtime host is behind a small interface so it can later be replaced with a native
@@ -16,7 +16,9 @@ Android engine while retaining the same application UI and user data locations.
 
 ## Build
 
-Use a JDK 17+ and Android SDK API 35:
+Use a JDK 17+ and Android SDK API 35 to build the launcher. The game itself runs in a
+separate ARM64 JRE 25 installed by the compatibility host; the Android launcher must
+not attempt to compile the upstream Java 25 game sources into DEX.
 
 ```bash
 ../gradlew -p android :app:assembleDebug
