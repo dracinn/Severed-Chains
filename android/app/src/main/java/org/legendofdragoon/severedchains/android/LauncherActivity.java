@@ -2,6 +2,8 @@ package org.legendofdragoon.severedchains.android;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.ClipboardManager;
+import android.content.ClipData;
 import android.net.Uri;
 import android.os.Bundle;
 import android.widget.Button;
@@ -13,6 +15,7 @@ import org.legendofdragoon.severedchains.android.runtime.GameDataImporter;
 import org.legendofdragoon.severedchains.android.runtime.GamePaths;
 import org.legendofdragoon.severedchains.android.runtime.Jre25Installer;
 import org.legendofdragoon.severedchains.android.runtime.RuntimeHost;
+import org.legendofdragoon.severedchains.android.runtime.RuntimeLog;
 
 import java.io.IOException;
 
@@ -67,6 +70,11 @@ public final class LauncherActivity extends Activity {
     installRuntime.setOnClickListener(ignored -> installRuntime());
     content.addView(installRuntime);
 
+    final Button copyLog = new Button(this);
+    copyLog.setText("Copy runtime log");
+    copyLog.setOnClickListener(ignored -> copyRuntimeLog());
+    content.addView(copyLog);
+
     final TextView legal = new TextView(this);
     legal.setText("The game and disc images are not bundled. Import your own legally obtained disc images.");
     legal.setTextSize(14);
@@ -110,12 +118,25 @@ public final class LauncherActivity extends Activity {
     status.setText("Downloading and installing ARM64 JRE 25…");
     new Thread(() -> {
       try {
+        RuntimeLog.info(gamePaths, "Install button pressed.");
         Jre25Installer.install(gamePaths, message -> runOnUiThread(() -> status.setText(message)));
         runOnUiThread(this::refreshStatus);
       } catch (final IOException e) {
+        RuntimeLog.error(gamePaths, "Installer surfaced an error", e);
         runOnUiThread(() -> status.setText("Runtime installation failed: " + e.getMessage()));
       }
     }, "jre25-installer").start();
+  }
+
+  private void copyRuntimeLog() {
+    try {
+      final String log = RuntimeLog.read(gamePaths);
+      final ClipboardManager clipboard = getSystemService(ClipboardManager.class);
+      clipboard.setPrimaryClip(ClipData.newPlainText("Severed Chains runtime log", log));
+      status.setText("Runtime log copied to clipboard.");
+    } catch (final IOException e) {
+      status.setText("No runtime log is available yet.");
+    }
   }
 
   private void refreshStatus() {

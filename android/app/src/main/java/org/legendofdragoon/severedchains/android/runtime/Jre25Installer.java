@@ -38,15 +38,24 @@ public final class Jre25Installer {
   }
 
   public static void install(final GamePaths paths, final ProgressListener progress) throws IOException {
+    RuntimeLog.info(paths, "JRE 25 installation requested; runtime=" + paths.runtime());
     if (isInstalled(paths)) {
+      RuntimeLog.info(paths, "JRE 25 was already installed.");
       progress.onProgress("ARM64 JRE 25 is already installed.");
       return;
     }
 
     final File archive = new File(paths.runtime(), "jre25-android-arm64.tar.xz");
-    download(archive, progress);
-    verifySha256(archive);
-    extract(archive, new File(paths.runtime(), "jre25"), progress);
+    try {
+      download(archive, progress);
+      RuntimeLog.info(paths, "Downloaded archive bytes=" + archive.length());
+      verifySha256(archive);
+      RuntimeLog.info(paths, "Archive SHA-256 verified.");
+      extract(paths, archive, new File(paths.runtime(), "jre25"), progress);
+    } catch (final IOException e) {
+      RuntimeLog.error(paths, "JRE 25 installation failed: " + e.getMessage(), e);
+      throw e;
+    }
     if (!isInstalled(paths)) {
       throw new IOException("Runtime archive did not contain a usable ARM64 JRE 25");
     }
@@ -111,25 +120,32 @@ public final class Jre25Installer {
     }
   }
 
-  private static void extract(final File archive, final File target, final ProgressListener progress) throws IOException {
+  private static void extract(final GamePaths paths, final File archive, final File target, final ProgressListener progress) throws IOException {
     final File staging = new File(target.getParentFile(), target.getName() + ".staging");
     deleteRecursively(staging);
     if (!staging.mkdirs()) {
       throw new IOException("Could not create runtime staging directory");
     }
+    final String stagingPath = staging.getCanonicalPath();
+    final String rootPath = stagingPath + File.separator;
+    int entryCount = 0;
 
     try (InputStream fileInput = new BufferedInputStream(new FileInputStream(archive));
          XZCompressorInputStream xz = new XZCompressorInputStream(fileInput);
          TarArchiveInputStream tar = new TarArchiveInputStream(xz, StandardCharsets.UTF_8.name())) {
       TarArchiveEntry entry;
       while ((entry = tar.getNextTarEntry()) != null) {
+        entryCount++;
+        RuntimeLog.info(paths, "Archive entry " + entryCount + ": " + entry.getName());
         if (entry.isSymbolicLink() || entry.isLink()) {
           throw new IOException("Runtime archive links are not supported");
         }
         final File output = new File(staging, entry.getName());
-        final String rootPath = staging.getCanonicalPath() + File.separator;
-        if (!output.getCanonicalPath().startsWith(rootPath)) {
-          throw new IOException("Unsafe runtime archive path");
+        final String outputPath = output.getCanonicalPath();
+        // A tar root entry such as "./" canonically resolves to staging itself. It is safe;
+        // everything else must be a child, which still rejects absolute paths and ../ traversal.
+        if (!outputPath.equals(stagingPath) && !outputPath.startsWith(rootPath)) {
+          throw new IOException("Unsafe runtime archive path: " + entry.getName());
         }
         if (entry.isDirectory()) {
           if (!output.exists() && !output.mkdirs()) {
@@ -149,6 +165,7 @@ public final class Jre25Installer {
       deleteRecursively(staging);
       throw e;
     }
+    RuntimeLog.info(paths, "Extracted " + entryCount + " runtime archive entries.");
 
     deleteRecursively(target);
     if (!staging.renameTo(target)) {
