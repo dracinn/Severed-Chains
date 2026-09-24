@@ -16,6 +16,8 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Downloads and safely extracts the public ARM64 JRE 25 runtime used by the compatibility host. */
 public final class Jre25Installer {
@@ -133,19 +135,29 @@ public final class Jre25Installer {
     try (InputStream fileInput = new BufferedInputStream(new FileInputStream(archive));
          XZCompressorInputStream xz = new XZCompressorInputStream(fileInput);
          TarArchiveInputStream tar = new TarArchiveInputStream(xz, StandardCharsets.UTF_8.name())) {
+      final List<PendingLink> links = new ArrayList<>();
       TarArchiveEntry entry;
       while ((entry = tar.getNextTarEntry()) != null) {
         entryCount++;
         RuntimeLog.info(paths, "Archive entry " + entryCount + ": " + entry.getName());
-        if (entry.isSymbolicLink() || entry.isLink()) {
-          throw new IOException("Runtime archive links are not supported");
-        }
         final File output = new File(staging, entry.getName());
         final String outputPath = output.getCanonicalPath();
         // A tar root entry such as "./" canonically resolves to staging itself. It is safe;
         // everything else must be a child, which still rejects absolute paths and ../ traversal.
         if (!outputPath.equals(stagingPath) && !outputPath.startsWith(rootPath)) {
           throw new IOException("Unsafe runtime archive path: " + entry.getName());
+        }
+        if (entry.isLink()) {
+          throw new IOException("Runtime archive hard links are not supported: " + entry.getName());
+        }
+        if (entry.isSymbolicLink()) {
+          final File linkedFile = new File(output.getParentFile(), entry.getLinkName()).getCanonicalFile();
+          final String linkedPath = linkedFile.getPath();
+          if (!linkedPath.equals(stagingPath) && !linkedPath.startsWith(rootPath)) {
+            throw new IOException("Unsafe runtime archive link target: " + entry.getName());
+          }
+          links.add(new PendingLink(output, linkedFile, entry.getName()));
+          continue;
         }
         if (entry.isDirectory()) {
           if (!output.exists() && !output.mkdirs()) {
@@ -161,6 +173,20 @@ public final class Jre25Installer {
           copy(tar, stream);
         }
       }
+      for (final PendingLink link : links) {
+        if (!link.source().isFile()) {
+          throw new IOException("Runtime archive link target is missing: " + link.name());
+        }
+        final File parent = link.output().getParentFile();
+        if (!parent.exists() && !parent.mkdirs()) {
+          throw new IOException("Could not create runtime link parent directory");
+        }
+        try (InputStream input = new FileInputStream(link.source());
+             OutputStream output = new FileOutputStream(link.output())) {
+          copy(input, output);
+        }
+        RuntimeLog.info(paths, "Materialized in-tree archive link: " + link.name());
+      }
     } catch (final IOException e) {
       deleteRecursively(staging);
       throw e;
@@ -174,6 +200,8 @@ public final class Jre25Installer {
     }
     progress.onProgress("Verifying ARM64 JRE 25…");
   }
+
+  private record PendingLink(File output, File source, String name) { }
 
   private static void copy(final InputStream input, final OutputStream output) throws IOException {
     final byte[] buffer = new byte[BUFFER_SIZE];
